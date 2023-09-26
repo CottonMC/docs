@@ -1,0 +1,50 @@
+name: Update LibGui docs
+on: workflow_dispatch
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out docs repository
+        uses: actions/checkout@v4
+        with:
+          path: docs
+      - name: Find latest LibGui release
+        run: |
+          gh api repos/CottonMC/LibGui/releases/latest > latest.json
+          latest_name=$(cat latest.json | jq -r '.name')
+          latest_tag=$(cat latest.json | jq -r '.tag_name')
+          echo "latest-name=$latest_name" >> "$GITHUB_OUTPUT"
+          echo "latest-tag=$latest_tag" >> "$GITHUB_OUTPUT"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        id: find-latest
+      - name: Check out LibGui
+        uses: actions/checkout@v4
+        with:
+          repository: CottonMC/LibGui
+          path: libgui
+          ref: ${{steps.find-latest.outputs.latest-tag}}
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          # Minecraft uses the Microsoft JDK builds
+          distribution: 'microsoft'
+          java-version: '17'
+      - name: Build LibGui documentation
+        run: |
+          cd libgui
+          ./gradlew :javadoc
+      - name: Move docs
+        run: |
+          rm -rf docs/libgui/*
+          cp -R libgui/build/docs/javadoc/* docs/libgui
+      - name: Commit docs
+        run: |
+          cd docs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add libgui
+          git commit --allow-empty -m "LibGui $LATEST_NAME"
+          git push
+        env:
+          LATEST_NAME: ${{steps.find-latest.outputs.latest-name}}
